@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: psl_ai_detection
+    ports:
+      - "8000:8000"
+    environment:
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=psl2026
+    volumes:
+      - ./backend/psl_detection.db:/app/psl_detection.db
+      - ./backend/app/ml:/app/app/ml
+    restart: unless-stopped

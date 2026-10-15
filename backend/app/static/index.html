@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pakistani Sign Language (PSL) Real-Time AI Detection System</title>
+  <meta name="description" content="Final Year Project: Real-time Pakistani Sign Language (PSL) gesture recognition using MediaPipe hand tracking, deep Bidirectional LSTM neural network, Urdu Text-to-Speech synthesis, and Admin Analytics.">
+  
+  <!-- Modern Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@700&family=Inter:wght@300;400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@500;700&display=swap" rel="stylesheet">
+  
+  <!-- MediaPipe Hands & Camera Utils CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body class="dark-theme">
+  <!-- Ambient background glow -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+
+  <!-- Header / Navigation -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-logo">
+          <span class="logo-icon">🖐️</span>
+          <span class="pulse-ring"></span>
+        </div>
+        <div class="brand-text">
+          <h1>PSL <span class="highlight">Vision AI</span></h1>
+          <p class="tagline">Pakistani Sign Language Real-Time Detection • FYP</p>
+        </div>
+      </div>
+
+      <nav class="nav-tabs" role="tablist">
+        <button class="nav-tab active" data-tab="detect" id="tab-detect" role="tab">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+          Live Detection
+        </button>
+        <button class="nav-tab" data-tab="analytics" id="tab-analytics" role="tab">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+          Analytics Dashboard
+        </button>
+        <button class="nav-tab" data-tab="dictionary" id="tab-dictionary" role="tab">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          PSL Dictionary (51 Signs)
+        </button>
+      </nav>
+
+      <div class="header-actions">
+        <div class="status-indicator" id="connection-status" title="WebSocket Server Status">
+          <span class="status-dot"></span>
+          <span class="status-label">Connecting...</span>
+        </div>
+        <button class="icon-toggle-btn" id="tts-toggle" title="Toggle Urdu Speech Output">
+          <span class="tts-icon">🔊</span>
+          <span class="tts-text">Audio On</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <!-- TAB 1: LIVE DETECTION -->
+    <section id="view-detect" class="tab-view active">
+      <div class="detection-grid">
+        <!-- Camera & MediaPipe Viewport Card -->
+        <div class="card camera-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2>Webcam Feed & Landmark Mesh</h2>
+              <span class="badge live-badge"><span class="blink-dot"></span> REAL-TIME</span>
+            </div>
+            <div class="card-controls">
+              <button class="btn btn-secondary btn-sm" id="btn-toggle-camera">
+                <span class="btn-icon">📷</span> <span id="camera-btn-text">Stop Camera</span>
+              </button>
+              <button class="btn btn-primary btn-sm" id="btn-quick-sample" title="Simulate a gesture sequence for instant verification">
+                <span class="btn-icon">⚡</span> Quick Test Sign
+              </button>
+            </div>
+          </div>
+
+          <div class="viewport-wrapper">
+            <!-- Hidden video element feeds MediaPipe -->
+            <video id="webcam-video" playsinline></video>
+            <!-- Canvas renders hands mesh and landmarks -->
+            <canvas id="output-canvas" width="640" height="480"></canvas>
+
+            <div class="viewport-overlay" id="viewport-overlay">
+              <div class="overlay-corner top-left"></div>
+              <div class="overlay-corner top-right"></div>
+              <div class="overlay-corner bottom-left"></div>
+              <div class="overlay-corner bottom-right"></div>
+
+              <div class="hand-tracking-tag" id="hand-tracking-tag">
+                <span class="radar-dot"></span>
+                <span id="tracking-status-text">Position hand inside frame</span>
+              </div>
+            </div>
+
+            <!-- Empty state fallback if camera blocked -->
+            <div class="camera-fallback" id="camera-fallback" style="display: none;">
+              <div class="fallback-content">
+                <span class="fallback-icon">📹</span>
+                <h3>Webcam Access Required</h3>
+                <p>Please grant browser camera permissions or click below to simulate live detection test gestures.</p>
+                <button class="btn btn-primary" id="btn-request-cam">Allow Camera</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="camera-metrics">
+            <div class="metric-pill">
+              <span class="metric-label">Landmarks Tracked:</span>
+              <span class="metric-val" id="metric-landmarks">21 (x, y, z)</span>
+            </div>
+            <div class="metric-pill">
+              <span class="metric-label">Inference Buffer:</span>
+              <span class="metric-val" id="metric-buffer">0 / 30 frames</span>
+            </div>
+            <div class="metric-pill">
+              <span class="metric-label">Pipeline Latency:</span>
+              <span class="metric-val" id="metric-latency">~18 ms</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-Time Detection Result Card -->
+        <div class="card result-card">
+          <div class="card-header">
+            <h2>Current Recognized Sign</h2>
+            <span class="badge category-badge" id="sign-category-badge">Urdu Alphabet</span>
+          </div>
+
+          <div class="result-showcase">
+            <div class="urdu-display-container">
+              <div class="urdu-script" id="detected-urdu">الف</div>
+              <div class="english-title" id="detected-english">Alif</div>
+              <div class="phonetic-cue" id="detected-phonetic">Phonetic: /Alif/</div>
+            </div>
+
+            <div class="confidence-gauge">
+              <div class="gauge-header">
+                <span class="gauge-label">Model Confidence</span>
+                <span class="gauge-percent" id="confidence-percentage">98.4%</span>
+              </div>
+              <div class="gauge-track">
+                <div class="gauge-fill" id="confidence-bar" style="width: 98.4%;"></div>
+              </div>
+            </div>
+
+            <div class="audio-control-row">
+              <button class="btn btn-outline" id="btn-speak-sign">
+                <span>🔊 Pronounce in Urdu</span>
+              </button>
+              <button class="btn btn-outline" id="btn-clear-history">
+                <span>🗑️ Clear History</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Real-Time Stream / Translation Sentence Bar -->
+          <div class="translation-sentence-box">
+            <div class="sentence-box-header">
+              <span class="box-title">Formed Sentence / Translation Sequence:</span>
+              <button class="btn-copy" id="btn-copy-sentence" title="Copy Text">📋 Copy</button>
+            </div>
+            <div class="sentence-content" id="sentence-content">
+              <span class="empty-prompt">Signs you perform will automatically appear here in Urdu script...</span>
+            </div>
+          </div>
+
+          <!-- History Feed -->
+          <div class="history-section">
+            <div class="history-header">
+              <h3>Recent Detections</h3>
+              <span class="badge" id="history-count">0 items</span>
+            </div>
+            <div class="history-list" id="history-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: ANALYTICS DASHBOARD -->
+    <section id="view-analytics" class="tab-view">
+      <div class="analytics-container">
+        <!-- KPI Cards -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-icon-wrap cyan">📊</div>
+            <div class="kpi-details">
+              <span class="kpi-title">Total Detections</span>
+              <h3 class="kpi-value" id="kpi-total">--</h3>
+              <span class="kpi-subtitle">Lifetime logged events</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon-wrap emerald">📅</div>
+            <div class="kpi-details">
+              <span class="kpi-title">Today's Detections</span>
+              <h3 class="kpi-value" id="kpi-today">--</h3>
+              <span class="kpi-subtitle">Current 24h window</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon-wrap violet">🎯</div>
+            <div class="kpi-details">
+              <span class="kpi-title">Mean Confidence</span>
+              <h3 class="kpi-value" id="kpi-conf">--%</h3>
+              <span class="kpi-subtitle">Model prediction accuracy</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon-wrap amber">🔤</div>
+            <div class="kpi-details">
+              <span class="kpi-title">PSL Vocabulary</span>
+              <h3 class="kpi-value" id="kpi-classes">51 Signs</h3>
+              <span class="kpi-subtitle">36 Letters • 10 Digits • 5 Phrases</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="charts-grid">
+          <div class="card chart-card">
+            <div class="card-header">
+              <h2>7-Day Translation Activity Trend</h2>
+              <span class="badge">Past Week</span>
+            </div>
+            <div class="chart-wrapper">
+              <div class="svg-chart-container" id="trend-chart-container">
+                <!-- SVG Chart injected dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="card-header">
+              <h2>Sign Category Breakdown</h2>
+              <span class="badge">Distribution</span>
+            </div>
+            <div class="breakdown-wrapper" id="category-breakdown-container">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Top Signs & Live Table -->
+        <div class="dashboard-tables-grid">
+          <div class="card">
+            <div class="card-header">
+              <h2>Most Frequently Used PSL Signs</h2>
+              <span class="badge">Top Performers</span>
+            </div>
+            <div class="top-signs-list" id="top-signs-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>Live Event Activity Log</h2>
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-analytics">🔄 Refresh</button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Urdu</th>
+                    <th>English Sign</th>
+                    <th>Category</th>
+                    <th>Confidence</th>
+                    <th>Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody id="analytics-table-body">
+                  <!-- Populated via API -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: PSL DICTIONARY (51 SIGNS) -->
+    <section id="view-dictionary" class="tab-view">
+      <div class="dictionary-container">
+        <div class="dictionary-header">
+          <div>
+            <h2>Pakistani Sign Language Directory</h2>
+            <p>Comprehensive vocabulary reference including all Urdu alphabet letters, numbers, and conversational signs.</p>
+          </div>
+          <div class="dictionary-filters">
+            <button class="filter-btn active" data-filter="all">All (51)</button>
+            <button class="filter-btn" data-filter="letter">Letters (36)</button>
+            <button class="filter-btn" data-filter="digit">Digits (10)</button>
+            <button class="filter-btn" data-filter="phrase">Phrases (5)</button>
+          </div>
+        </div>
+
+        <div class="signs-grid" id="signs-grid">
+          <!-- Dynamically populated from /api/detection/signs -->
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Notification Toast -->
+  <div class="toast" id="toast"></div>
+
+  <footer class="app-footer">
+    <div class="footer-content">
+      <p>Pakistani Sign Language (PSL) Real-Time Detection System • Final Year Project (FYP)</p>
+      <p class="credits">Built with MediaPipe Hands, TensorFlow Bi-LSTM, FastAPI WebSocket & Urdu Text-to-Speech Engine.</p>
+    </div>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
